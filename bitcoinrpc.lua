@@ -62,6 +62,7 @@ function M.call(method, ...)
   })
   local respbody = {}
 
+  http.TIMEOUT = 5
   local ret, code, headers = http.request({
     url = "http://" .. config.username .. ":" .. config.password .. "@" .. config.host .. ":" .. config.port .. "/",
     headers = {
@@ -73,20 +74,38 @@ function M.call(method, ...)
     sink = ltn12.sink.table(respbody)
   })
 
-  M.status = code
-  M.raw_response = table.concat(respbody)
-  M.response = json.decode(M.raw_response)
-  M.error = ret
+  if ret == 1 then
+    M.status = code
+    M.raw_response = table.concat(respbody)
+    M.response = json.decode(M.raw_response)
+    M.error = nil
 
-  if type(M.response.error) == "table" then
-    M.error = M.response.error.message
-  end
+    if M.status ~= 200 then
+      if M.status == 400 then
+        M.error = "HTTP_BAD_REQUEST"
+      elseif M.status == 401 then
+        M.error = "HTTP_UNAUTHORIZED"
+      elseif M.status == 403 then
+        M.error = "HTTP_FORBIDDEN"
+      elseif M.status == 404 then
+        M.error = "HTTP_NOT_FOUND"
+      end
+    elseif type(M.response.error) == "table" then
+      M.error = M.response.error.message
+    end
 
-  if M.error ~= 1 then
+    if M.error ~= nil then
+      return nil
+    end
+
+    return M.response.result
+  else
+    M.status = nil
+    M.raw_response = nil
+    M.response = nil
+    M.error = code
     return nil
   end
-
-  return M.response.result
 end
 
 return M
